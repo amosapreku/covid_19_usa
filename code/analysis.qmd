@@ -1,0 +1,276 @@
+---
+title: "Analysis"
+author: "Amos Apreku"
+format: pdf
+editor: visual
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggrepel)
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Reading in our dat data
+
+dat <- readRDS("../data/dat.rds")
+
+
+
+```
+
+```{r}
+colnames(dat)
+head(dat)
+str(dat)
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+dat_weekly <- dat %>%
+  group_by(date) %>%
+  summarize(total_deaths = sum(deaths, na.rm = TRUE))
+ggplot(dat_weekly, aes(x = date, y = total_deaths)) +
+  geom_line() +
+  labs(title = "Weekly COVID-19 Deaths Over Time",
+       x = "Date",
+       y = "Total Deaths") +
+  theme_minimal()
+
+```
+
+```{r}
+library(ggplot2)
+wave_periods <- data.frame(
+  wave = c("Wave 1", "Wave 2", "Wave 3", "Wave 4", "Wave 5"),
+  start = as.Date(c("2020-01-01", "2020-07-01", "2021-03-01", "2022-01-01", "2022-07-01")),
+  end = as.Date(c("2020-06-30", "2021-02-28", "2021-12-31", "2022-06-30", "2024-12-31"))
+)
+ggplot(dat_weekly, aes(x = date, y = total_deaths)) +
+  geom_line(color = "blue") +
+  geom_vline(xintercept = as.Date(c("2020-06-30", "2021-02-28", "2021-12-31", "2022-06-30")), 
+             linetype = "dashed", color = "red", size = 0.7) +
+  annotate("text", x = as.Date("2020-04-01"), y = max(dat_weekly$total_deaths, na.rm = TRUE) * 0.9, label = "Wave 1", size = 4, color = "black") +
+  annotate("text", x = as.Date("2020-10-01"), y = max(dat_weekly$total_deaths, na.rm = TRUE) * 0.9, label = "Wave 2", size = 4, color = "black") +
+  annotate("text", x = as.Date("2021-07-01"), y = max(dat_weekly$total_deaths, na.rm = TRUE) * 0.9, label = "Wave 3", size = 4, color = "black") +
+  annotate("text", x = as.Date("2022-03-01"), y = max(dat_weekly$total_deaths, na.rm = TRUE) * 0.9, label = "Wave 4", size = 4, color = "black") +
+  annotate("text", x = as.Date("2023-05-01"), y = max(dat_weekly$total_deaths, na.rm = TRUE) * 0.9, label = "Wave 5", size = 4, color = "black") +
+  labs(title = "Weekly COVID-19 Deaths Over Time with Wave Markers",
+       x = "Date",
+       y = "Total Deaths") +
+  theme_minimal()
+
+```
+
+```{r}
+
+```
+
+```{r}
+# Define the wave periods
+dat <- dat %>%
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-01") & date <= as.Date("2020-06-30") ~ "Wave 1",
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-02-28") ~ "Wave 2",
+    date >= as.Date("2021-03-01") & date <= as.Date("2021-12-31") ~ "Wave 3",
+    date >= as.Date("2022-01-01") & date <= as.Date("2022-06-30") ~ "Wave 4",
+    date >= as.Date("2022-07-01") & date <= as.Date("2024-12-31") ~ "Wave 5",
+    TRUE ~ NA_character_
+  ))
+
+# Calculate death rates by state and wave
+death_rates <- dat %>%
+  group_by(state_name, wave) %>%
+  summarize(
+    total_deaths = sum(deaths, na.rm = TRUE),
+    population = max(population, na.rm = TRUE),
+    .groups = "drop" # Explicitly drop grouping after summarization
+  ) %>%
+  mutate(death_rate_per_100k = (total_deaths / population) * 100000)
+
+
+```
+
+```{r, plot-top-bottom, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 2: Top 5 and Bottom 5 States by COVID-19 Death Rate per 100,000 Population Across Waves"}
+library(dplyr)
+library(ggplot2)
+
+top_bottom_states <- death_rates %>%
+  group_by(wave) %>%
+  arrange(wave, desc(death_rate_per_100k)) %>%
+  slice(c(1:5, (n() - 4):n()))  
+
+ggplot(top_bottom_states, aes(x = reorder(state_name, death_rate_per_100k), y = death_rate_per_100k, fill = wave)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ wave, scales = "free_y", ncol = 2) + 
+  labs(
+    title = "Top 5 and Bottom 5 States by COVID-19 Death Rate per Wave in US",
+    x = "State",
+    y = "Death Rate per 100,000",
+    fill = "Wave"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),          # Reduce font size for state names
+    axis.text.x = element_text(size = 9),          # Adjust x-axis font size
+    strip.text = element_text(size = 12, face = "bold"),  # Increase facet label size
+    plot.title = element_text(hjust = 0.5, size = 14),    # Center and enlarge the plot title
+    legend.position = "bottom"                     # Move legend to bottom for more space
+  )
+```
+
+```{r}
+
+
+```
+
+```{r, plot-cases-deaths, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 3: Weekly COVID-19 Cases and Deaths Over Time"}
+# Data preparation
+dat_weekly <- dat %>%
+  group_by(date) %>%
+  summarize(
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths = sum(deaths, na.rm = TRUE)
+  )
+
+# Plot
+ggplot(dat_weekly, aes(x = date)) +
+  geom_line(aes(y = total_cases, color = "Cases"), size = 1) +
+  geom_line(aes(y = total_deaths * 100, color = "Deaths"), size = 1) +  # Scale deaths for visualization
+  scale_y_continuous(
+    name = "Total Cases",
+    sec.axis = sec_axis(~ . / 100, name = "Total Deaths")
+  ) +
+  scale_color_manual(values = c("Cases" = "blue", "Deaths" = "red")) +
+  labs(
+    title = "Weekly COVID-19 Cases and Deaths Over Time",
+    x = "Date",
+    color = "Metric"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.title.y.right = element_text(color = "red"),
+    axis.title.y.left = element_text(color = "blue"),
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+```
+
+```{r, plot-trends-covid, include=TRUE, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 4: Trends in COVID-19 Cases, Hospitalizations, and Deaths per 100,000 "}
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Trend Analysis of COVID-19: Cases, Hospitalizations, and Deaths per 100,000 People
+dat |>
+  mutate(
+    cases_per_100k = (cases / population) * 100000,        # Calculate cases rate per 100,000
+    hosp_per_100k = (hosp / population) * 100000,          # Calculate hospitalizations rate per 100,000
+    deaths_per_100k = (deaths / population) * 100000       # Calculate deaths rate per 100,000
+  ) |>
+  pivot_longer(
+    cols = c(cases_per_100k, hosp_per_100k, deaths_per_100k),
+    names_to = "metric",
+    values_to = "rate"
+  ) |>
+  ggplot(aes(x = date, y = rate, color = region_name)) +
+  geom_line() +                                           # Plot lines
+  facet_wrap(~ metric, scales = "free_y", ncol = 1) +    # Facet by metric, with free y-scales for each facet
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y", limits = as.Date(c("2020-01-01", "2024-12-31"))) +
+  labs(
+    title = "Trends in COVID-19 Cases, Hospitalizations, and Deaths per 100,000 People",
+    x = "Date",
+    y = "Rate per 100,000",
+    color = "Region"
+  ) +
+  theme_minimal() +                                       # Use a minimal theme for clean visualization
+  theme(
+    plot.title = element_text(hjust = 0.5),               # Center the plot title
+    axis.text.x = element_text(angle = 45, hjust = 1)     # Rotate x-axis labels for readability
+  )
+
+
+```
+
+```{r}
+# Define the wave periods
+dat <- dat %>%
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-01") & date <= as.Date("2020-06-30") ~ "Wave 1",
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-02-28") ~ "Wave 2",
+    date >= as.Date("2021-03-01") & date <= as.Date("2021-12-31") ~ "Wave 3",
+    date >= as.Date("2022-01-01") & date <= as.Date("2022-06-30") ~ "Wave 4",
+    date >= as.Date("2022-07-01") & date <= as.Date("2024-12-31") ~ "Wave 5",
+    TRUE ~ NA_character_
+  ))
+
+# Calculate death rates by state and wave
+death_rates <- dat %>%
+  group_by(state_name, wave) %>%
+  summarize(
+    total_deaths = sum(deaths, na.rm = TRUE),
+    population = max(population, na.rm = TRUE)
+  ) %>%
+  mutate(death_rate_per_100k = (total_deaths / population) * 100000)
+
+# View the death rates
+print(death_rates)
+
+
+```
+
+```{r,include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(DT)
+
+state_summary <- dat %>%
+  group_by(state_name) %>%
+  summarize(
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths = sum(deaths, na.rm = TRUE),
+    total_hosp = sum(hosp, na.rm = TRUE),
+    case_rate = round(sum(cases, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    death_rate = round(sum(deaths, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    hosp_rate = round(sum(hosp, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000)
+  ) %>%
+  arrange(desc(case_rate))
+
+datatable(
+  state_summary,
+  colnames = c("State", "Total Cases", "Total Deaths", "Total Hospitalizations", 
+               "Case Rate (per 100k)", "Death Rate (per 100k)", "Hospitalization Rate (per 100k)"),
+  options = list(pageLength = 10, autoWidth = TRUE),
+  caption = "Table 1: COVID-19 Total Cases, Deaths, Hospitalizations, and Rates by State"
+)
+
+```
+
+```{r,include=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+region_summary <- dat %>%
+  group_by(region_name) %>%
+  summarize(
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths = sum(deaths, na.rm = TRUE),
+    total_hosp = sum(hosp, na.rm = TRUE),
+    case_rate = round(sum(cases, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    death_rate = round(sum(deaths, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    hosp_rate = round(sum(hosp, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000)
+  ) %>%
+  arrange(desc(case_rate))
+
+datatable(
+  region_summary,
+  colnames = c("Region", "Total Cases", "Total Deaths", "Total Hospitalizations", 
+               "Case Rate (per 100k)", "Death Rate (per 100k)", "Hospitalization Rate (per 100k)"),
+  options = list(pageLength = 10, autoWidth = TRUE),
+  caption = "Table 2: COVID-19 Total Cases, Deaths, Hospitalizations, and Rates by Region"
+)
+
+```

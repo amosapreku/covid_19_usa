@@ -1,0 +1,417 @@
+---
+title: "Supplementary Methods"
+author: "Amos Apreku"
+format: pdf
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggrepel)
+```
+
+```{r}
+dat <- readRDS("../data/dat.rds")
+```
+
+```{r}
+names(dat)
+```
+
+```{r}
+head(dat)
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Assuming your data is loaded into a dataframe called 'dat'
+# Summarize metrics by region and state
+summary_table <- dat %>%
+  group_by(region_name, state_name) %>%
+  summarize(
+    Total_Cases = sum(cases, na.rm = TRUE),
+    Total_Hospitalizations = sum(hosp, na.rm = TRUE),
+    Total_Deaths = sum(deaths, na.rm = TRUE),
+    Avg_Vaccination_Complete = mean(series_complete, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Create a formatted table
+summary_table %>%
+  kbl(caption = "Descriptive Summary of COVID-19 Metrics by State and Region") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r}
+dat <- dat %>%
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-01") & date <= as.Date("2020-06-30") ~ "Wave 1",
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-02-28") ~ "Wave 2",
+    date >= as.Date("2021-03-01") & date <= as.Date("2021-12-31") ~ "Wave 3",
+    date >= as.Date("2022-01-01") & date <= as.Date("2022-06-30") ~ "Wave 4",
+    date >= as.Date("2022-07-01") & date <= as.Date("2024-12-31") ~ "Wave 5",
+    TRUE ~ NA_character_
+  ))
+
+# Calculate death rates by state and wave
+death_rates <- dat %>%
+  group_by(state_name, wave) %>%
+  summarize(
+    total_deaths = sum(deaths, na.rm = TRUE),
+    population = max(population, na.rm = TRUE)
+  ) %>%
+  mutate(death_rate_per_100k = (total_deaths / population) * 100000)
+
+# View the death rates
+print(death_rates)
+```
+
+```{r}
+# Plot death rates by state and wave
+ggplot(death_rates, aes(x = reorder(state_name, -death_rate_per_100k), y = death_rate_per_100k, fill = wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  labs(title = "COVID-19 Death Rates by State and Wave",
+       x = "State",
+       y = "Death Rate per 100,000") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = ))  # Set x-axis text size to 5
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(maps)
+library(viridis)  
+```
+
+```{r}
+state_summary <- dat %>%
+  group_by(state_name) %>%
+  summarize(
+    case_rate = sum(cases, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000,
+    death_rate = sum(deaths, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000,
+    hosp_rate = sum(hosp, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000
+  ) %>%
+  arrange(desc(case_rate))
+```
+
+```{r}
+library(dplyr)
+library(DT)
+
+# Calculate total counts and rates per 100,000 for each state
+state_summary <- dat %>%
+  group_by(state_name) %>%
+  summarize(
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths = sum(deaths, na.rm = TRUE),
+    total_hosp = sum(hosp, na.rm = TRUE),
+    case_rate = round(sum(cases, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    death_rate = round(sum(deaths, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000),
+    hosp_rate = round(sum(hosp, na.rm = TRUE) / sum(population, na.rm = TRUE) * 100000)
+  ) %>%
+  arrange(desc(case_rate))
+
+
+```
+
+```{r}
+# Load US map data
+us_states <- map_data("state")
+
+# Prepare the data by converting state names to lowercase for matching
+cases_data <- state_summary %>%
+  mutate(state_name = tolower(state_name))
+
+# Join the map data with the cases data
+map_cases <- us_states %>%
+  left_join(cases_data, by = c("region" = "state_name"))
+
+# Plot for total cases
+ggplot(map_cases, aes(x = long, y = lat, group = group, fill = total_cases)) +
+  geom_polygon(color = "white") +
+  coord_fixed(1.3) +
+  scale_fill_viridis(option = "inferno", direction = -1, na.value = "grey80", 
+                     name = "Total Cases") +
+  labs(title = "Total COVID-19 Cases by State") +
+  theme_minimal() +
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), 
+        axis.title = element_blank())
+
+```
+
+```{r}
+# Plot for total deaths
+ggplot(map_cases, aes(x = long, y = lat, group = group, fill = total_deaths)) +
+  geom_polygon(color = "white") +
+  coord_fixed(1.3) +
+  scale_fill_viridis(option = "plasma", direction = -1, na.value = "grey80", 
+                     name = "Total Deaths") +
+  labs(title = "Total COVID-19 Deaths by State") +
+  theme_minimal() +
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), 
+        axis.title = element_blank())
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(naniar)
+
+# Check the overall missingness in the dataset
+miss_summary <- dat %>%
+  summarise(
+    missing_cases = sum(is.na(cases)),
+    missing_hosp = sum(is.na(hosp)),
+    missing_deaths = sum(is.na(deaths)),
+    missing_series_complete = sum(is.na(series_complete)),
+    missing_booster = sum(is.na(booster))
+  )
+
+print(miss_summary)
+
+# Visualize missing data patterns
+gg_miss_upset(dat)
+
+# Calculate the percentage of missing data by state and variable
+missing_by_state <- dat %>%
+  group_by(state) %>%
+  summarise(
+    missing_cases = mean(is.na(cases)) * 100,
+    missing_hosp = mean(is.na(hosp)) * 100,
+    missing_deaths = mean(is.na(deaths)) * 100,
+    missing_series_complete = mean(is.na(series_complete)) * 100,
+    missing_booster = mean(is.na(booster)) * 100
+  )
+
+print(missing_by_state)
+
+# Plot missing data by state for each variable
+missing_by_state_long <- missing_by_state %>%
+  pivot_longer(
+    cols = c(missing_cases, missing_hosp, missing_deaths, missing_series_complete, missing_booster),
+    names_to = "variable",
+    values_to = "percent_missing"
+  )
+
+ggplot(missing_by_state_long, aes(x = state, y = percent_missing, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Percentage of Missing Data by State and Variable",
+    x = "State",
+    y = "Percentage of Missing Data",
+    fill = "Variable"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
+
+```
+
+```{r}
+dat <- dat %>%
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-01") & date <= as.Date("2020-06-30") ~ "Wave 1",
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-02-28") ~ "Wave 2",
+    date >= as.Date("2021-03-01") & date <= as.Date("2021-12-31") ~ "Wave 3",
+    date >= as.Date("2022-01-01") & date <= as.Date("2022-06-30") ~ "Wave 4",
+    date >= as.Date("2022-07-01") & date <= as.Date("2024-12-31") ~ "Wave 5",
+    TRUE ~ NA_character_
+  ))
+
+# Calculate death rates by state and wave
+death_rates <- dat %>%
+  group_by(state_name, wave) %>%
+  summarize(
+    total_deaths = sum(deaths, na.rm = TRUE),
+    population = max(population, na.rm = TRUE)
+  ) %>%
+  mutate(death_rate_per_100k = (total_deaths / population) * 100000)
+
+# View the death rates
+print(death_rates)
+```
+
+```{r}
+library(ggplot2)
+
+# Create a heatmap of death rates by state and wave
+ggplot(death_rates, aes(x = wave, y = reorder(state_name, -death_rate_per_100k), fill = death_rate_per_100k)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkred") +
+  labs(
+    title = "COVID-19 Death Rates by State and Wave",
+    x = "Wave",
+    y = "State",
+    fill = "Death Rate\n(per 100k)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 6),
+    axis.text.x = element_text(size = 10),
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r}
+# Use the existing wave definitions in your dataset
+dat <- dat %>%
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-01") & date <= as.Date("2020-06-30") ~ "Wave 1",
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-02-28") ~ "Wave 2",
+    date >= as.Date("2021-03-01") & date <= as.Date("2021-12-31") ~ "Wave 3",
+    date >= as.Date("2022-01-01") & date <= as.Date("2022-06-30") ~ "Wave 4",
+    date >= as.Date("2022-07-01") & date <= as.Date("2024-12-31") ~ "Wave 5",
+    TRUE ~ NA_character_
+  ))
+
+# Compute case fatality rates for Waves 1 to 4 only
+cfr_data <- dat %>%
+  filter(wave %in% c("Wave 1", "Wave 2", "Wave 3", "Wave 4")) %>%
+  group_by(wave) %>%
+  summarize(
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths = sum(deaths, na.rm = TRUE),
+    case_fatality_rate = ifelse(total_cases > 0, total_deaths / total_cases * 100, NA), # Avoid division by zero
+    .groups = "drop"
+  )
+
+# Visualize CFR across Waves 1 to 4
+library(ggplot2)
+
+ggplot(cfr_data, aes(x = wave, y = case_fatality_rate, fill = wave)) +
+  geom_bar(stat = "identity", width = 0.6) +  # Set bar width for better spacing
+  geom_text(aes(label = sprintf("%.2f%%", case_fatality_rate)), vjust = -0.5, size = 4) +  # Add percentage labels
+  labs(
+    title = "Case Fatality Rate by Wave Period",
+    x = "Wave Period",
+    y = "Case Fatality Rate (%)"
+  ) +
+  scale_fill_manual(values = c("Wave 1" = "orange", "Wave 2" = "yellow", "Wave 3" = "red", "Wave 4" = "purple")) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",  # Remove legend since fill is self-explanatory
+    axis.text.x = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+```
+
+```{r}
+
+```
+
+```{r}
+p <- dat |> mutate(cases =  cases/population*100000,
+                hosp = hosp/population*100000,
+              deaths = deaths/population*100000) |>
+  select(date, cases, hosp, deaths, state, region) |>
+  pivot_longer(c(cases, deaths, hosp), values_to = "rate", names_to = "outcome") |>
+  ggplot(aes(date, rate, color = region, group = state)) +
+  geom_line() +
+  facet_wrap(~outcome, nrow = 3, scales = "free_y")
+print(p)
+```
+
+i
+
+```{r, message=FALSE, warning=FALSE}
+#Figure 6
+# Calculate deaths per day per 100,000 people and booster rate
+time_period_booster <- dat |> 
+  filter(date >= "2021-03-01" & date <= "2021-09-01") |> 
+  group_by(state) |> 
+  summarize(
+    deaths_per_100k = sum(as.numeric(deaths), na.rm = TRUE) / 
+                      sum(as.numeric(population), na.rm = TRUE) * 100000 / n_distinct(date), # Adjusts for per day
+    booster_rate = max(as.numeric(booster) / as.numeric(population) * 100, na.rm = TRUE)
+  )
+
+# Scatter plot with color indicating death rate and ggrepel for state labels
+ggplot(time_period_booster, aes(x = booster_rate, y = deaths_per_100k, label = state, color = deaths_per_100k)) + 
+  geom_point(size = 3) + 
+  geom_text_repel() +
+  scale_color_gradient(low = "cyan", high = "red") + # Gradient from low to high
+  labs(
+    title = "Booster Vaccination Rate vs COVID-19 Death Rate (Mar-Sep 2021)",
+    x = "Booster Vaccination Rate (%)", 
+    y = "Deaths per Day per 100,000 People",
+    color = "Death Rate\n(Per 100,000)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#Figure 5
+# Calculate deaths per day per 100,000 people and vaccination rate
+time_period_1 <- dat |> 
+  filter(date >= "2021-03-01" & date <= "2021-09-01") |> 
+  group_by(state) |> 
+  summarize(
+    deaths_per_100k = sum(as.numeric(deaths), na.rm = TRUE) / 
+                      sum(as.numeric(population), na.rm = TRUE) * 100000 / n_distinct(date), # Adjusts for per day
+    vax_rate = max(as.numeric(series_complete) / as.numeric(population) * 100, na.rm = TRUE)
+  )
+
+# Scatter plot with color indicating death rate and ggrepel for state labels
+ggplot(time_period_1, aes(x = vax_rate, y = deaths_per_100k, label = state, color = deaths_per_100k)) + 
+  geom_point(size = 3) + 
+  geom_text_repel() +
+  scale_color_gradient(low = "blue", high = "red") + # Gradient from low to high
+  labs(
+    title = "Vaccination Rate vs COVID-19 Death Rate (Mar-Sep 2021)",
+    x = "Vaccination Rate (%)", 
+    y = "Deaths per Day per 100,000 People",
+    color = "Death Rate\n(Per 100,000)"
+  ) +
+  theme_minimal()
+```
+
+```{r, message=FALSE, warning=FALSE}
+#Figure 2
+# Vaccination Progress Over Time in US
+dat |>
+  filter(!is.na(series_complete),
+         !is.na(booster),
+         !is.na(population)) |>
+   select(date,state, population, series_complete, booster) |>
+  mutate(booster = as.numeric(booster))|>
+  mutate(series_complete= as.numeric(series_complete)) |>
+
+  group_by(date) |>
+  mutate(
+    vax_perc = (sum(series_complete) / sum(population)) * 100,
+    booster_perc = (sum(booster) / sum(population)) * 100
+  )|>
+  
+  ggplot(aes(x=date)) +
+  geom_line(aes(y=vax_perc, colour = "vax")) +
+  geom_line(aes(y = booster_perc, colour = "booster")) +
+  labs( y = "Percentage", color = "Vaccination Type")
+theme_minimal()
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Figure 4
+# Exploring Regional Variations: Insights on Vaccination Differences Across Regions
+
+dat |> 
+  filter(mmwr_week == epiweek(as_date("2021-07-01")), 
+         mmwr_year == epiyear(as_date("2021-07-01"))) |> 
+  mutate(booster = as.numeric(booster)) |>
+  mutate(series_complete = as.numeric(series_complete)) |>
+  mutate(vax_perc = (series_complete / population) * 100, 
+         region_name = reorder(as.factor(region_name), vax_perc)) |> 
+  ggplot(aes(x = region_name, y = vax_perc, fill = region_name)) + 
+  geom_boxplot() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  ggtitle("COVIV-19 Vaccination Rate Accross Regions in US")
+```
